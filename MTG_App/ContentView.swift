@@ -32,8 +32,12 @@ struct CardImageView: View {
 }
 
 struct MTGCardView: View {
-    var card: MTGCard
+    @State private var isShowingLargeImage = false
+    @State private var selectedLegalityIndex = 0 // Track the selected legality index
+
     
+    var card: MTGCard
+
     private func getBackgroundStyle(for legality: String) -> (Color, CGSize) {
         switch legality.lowercased() {
         case "legal":
@@ -48,61 +52,127 @@ struct MTGCardView: View {
             return (.gray, CGSize(width: 100, height: 40))
         }
     }
-    
+
     var body: some View {
-        ScrollView {
-            VStack(spacing: 10) {
-                CardImageView(imageURL: card.image_uris?.large)
-                    .padding()
-                
-                Text(card.name)
-                    .font(.title)
-                    
-                if let collectorNumber = card.collector_number {
-                    Text("Collector Number: \(collectorNumber)")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                        .padding(.bottom, 5)
-                }
-                
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Type: \(card.type_line)")
-                    Text("Oracle Text: \(card.oracle_text)")
-                }
-                .padding()
-                
-                // Display legalities information
-                if let legalities = card.legalities, !legalities.isEmpty {
-                    Section(header: Text("Legalities")) {
-                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 5), GridItem(.flexible(), spacing: 5)], spacing: 10) {
-                            ForEach(legalities.sorted(by: { $0.key < $1.key }), id: \.key) { legality in
-                                HStack {
-                                    Spacer()
-                                    Text(legality.value)
-                                        .foregroundColor(.white)
-                                        .padding(6)
-                                        .background(getBackgroundStyle(for: legality.value).0)
-                                        .cornerRadius(3)
-                                        .frame(width: getBackgroundStyle(for: legality.value).1.width, height: getBackgroundStyle(for: legality.value).1.height)
-                                    Spacer()
-                                    
-                                    Text(legality.key)
-                                        .foregroundColor(.black)
-                                        .frame(width: 65, alignment: .leading)
-                                    Spacer()
+        ZStack {
+            ScrollView {
+                VStack(spacing: 10) {
+                    CardImageView(imageURL: card.image_uris?.art_crop)
+                        .frame(maxWidth: .infinity)
+                        .onTapGesture {
+                            // Show the large image when tapped
+                            isShowingLargeImage = true
+                        }
+
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(card.name)
+                            .font(.title)
+                        if let collectorNumber = card.collector_number {
+                            Text("Collector Number: \(collectorNumber)")
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                                .padding(.bottom, 5)
+                        }
+                        Text(card.type_line)
+                        Text(card.oracle_text)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.white, lineWidth: 1) // Adjust color and line width as needed
+                            .background(Color.clear) // Transparent background
+                    )
+
+
+                    // Display legalities information
+                    if let legalities = card.legalities, !legalities.isEmpty {
+                        Section(header: Text("Legalities")) {
+                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 5), GridItem(.flexible(), spacing: 5)], spacing: 10) {
+                                ForEach(legalities.sorted(by: { $0.key < $1.key }), id: \.key) { legality in
+                                    HStack {
+                                        // Overlay Rectangle
+                                        Rectangle()
+                                            .foregroundColor(getBackgroundStyle(for: legality.value).0)
+                                            .cornerRadius(3)
+                                            .frame(width: getBackgroundStyle(for: legality.value).1.width, height: getBackgroundStyle(for: legality.value).1.height)
+                                            .zIndex(1) // Ensure the rectangle is on top
+                                            .overlay {
+                                                // Text for legality value
+                                                Text(legality.value)
+                                                    .foregroundColor(.white)
+                                                    .padding(6)
+                                                    .cornerRadius(3)
+                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                            }
+                                        // Text for legality key
+                                        Text(legality.key)
+                                            .foregroundColor(.black)
+                                            .frame(width: 65, alignment: .leading)
+                                            .lineLimit(1)
+                                    }
                                 }
                             }
                         }
-                        .padding()
+                    
+                    }
+                }
+                .navigationBarTitle(Text(card.name), displayMode: .inline)
+            }
+
+            // Large Image Popup
+            if isShowingLargeImage {
+                Color.black.opacity(0.8)
+                    .edgesIgnoringSafeArea(.all)
+                    .onTapGesture {
+                        // Dismiss the large image popup when tapped
+                        isShowingLargeImage = false
+                    }
+
+                if let largeImageURL = card.image_uris?.large {
+                    // Display a larger image as a popup overlay
+                    AsyncImage(url: URL(string: largeImageURL)) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .padding()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .cornerRadius(16)
+                                .padding(20)
+                        case .failure:
+                            // Handle failure, you can display an error image or message
+                            Image(systemName: "exclamationmark.triangle")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .foregroundColor(.red)
+                                .padding()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .cornerRadius(16)
+                                .padding(20)
+                        case .empty:
+                            // Placeholder or loading indicator
+                            ProgressView()
+                                .padding()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .cornerRadius(16)
+                                .padding(20)
+                        @unknown default:
+                            // Handle unknown state
+                            ProgressView()
+                                .padding()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .cornerRadius(16)
+                                .padding(20)
+                        }
                     }
                 }
             }
-            .padding()
-            .navigationBarTitle(Text(card.name), displayMode: .inline)
         }
     }
 }
-
 
     
     struct SearchBar: View {
